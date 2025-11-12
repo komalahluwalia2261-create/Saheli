@@ -4,11 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>💜 Saheli - Period Tracker</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore-compat.js"></script>
     <style>
         * {
             margin: 0;
@@ -27,7 +22,7 @@
             min-height: 100vh;
         }
         
-        .app {
+        .container {
             display: flex;
             flex-direction: column;
             min-height: 100vh;
@@ -57,7 +52,6 @@
             cursor: pointer;
             font-weight: 600;
             font-size: 13px;
-            transition: all 0.3s ease;
         }
         
         .logout-btn:hover {
@@ -79,13 +73,7 @@
             color: #666;
             cursor: pointer;
             font-weight: 600;
-            font-size: 13px;
-            transition: all 0.3s ease;
             border-bottom: 3px solid transparent;
-        }
-        
-        .nav button:hover {
-            color: #c084fc;
         }
         
         .nav button.active {
@@ -100,15 +88,6 @@
             max-width: 1100px;
             margin: 0 auto;
             width: 100%;
-        }
-        
-        .loading {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-size: 24px;
-            color: #c084fc;
         }
         
         .auth-page {
@@ -147,10 +126,13 @@
             font-size: 14px;
         }
         
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
         .auth-box input {
             width: 100%;
             padding: 12px 16px;
-            margin-bottom: 14px;
             border: 2px solid #e8e8e8;
             border-radius: 8px;
             font-size: 14px;
@@ -159,7 +141,6 @@
         .auth-box input:focus {
             outline: none;
             border-color: #c084fc;
-            box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.1);
         }
         
         .auth-btn {
@@ -175,16 +156,13 @@
             margin-bottom: 12px;
         }
         
-        .auth-btn:hover {
-            transform: translateY(-2px);
-        }
-        
         .toggle-btn {
             background: white !important;
             color: #c084fc !important;
             border: 2px solid #c084fc !important;
             width: 100%;
             padding: 12px;
+            font-weight: 600;
         }
         
         .error {
@@ -194,10 +172,6 @@
             padding: 10px;
             background: #ffe8e8;
             border-radius: 6px;
-        }
-        
-        .dashboard {
-            animation: slideIn 0.4s ease;
         }
         
         .dashboard-grid {
@@ -219,16 +193,15 @@
             margin-bottom: 16px;
         }
         
+        .card p {
+            color: #666;
+            font-size: 14px;
+            margin: 8px 0;
+        }
+        
         .cycle-card {
             background: linear-gradient(135deg, rgba(244, 114, 182, 0.1), rgba(192, 132, 252, 0.1));
             border-left: 4px solid #f472b6;
-        }
-        
-        .cycle-day {
-            font-size: 48px;
-            font-weight: 700;
-            color: #f472b6;
-            margin: 10px 0;
         }
         
         .log-entry {
@@ -241,7 +214,7 @@
         .log-entry h2 {
             color: #333;
             font-size: 28px;
-            margin-bottom: 6px;
+            margin-bottom: 25px;
         }
         
         .form-section {
@@ -283,7 +256,6 @@
         .form-section select:focus {
             outline: none;
             border-color: #c084fc;
-            box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.1);
         }
         
         .form-section textarea {
@@ -308,35 +280,8 @@
             transform: translateY(-2px);
         }
         
-        .welcome-message {
-            text-align: center;
-            padding: 40px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-        }
-        
-        .welcome-message h2 {
-            color: #c084fc;
-            font-size: 28px;
-            margin-bottom: 15px;
-        }
-        
-        .welcome-message p {
-            color: #666;
-            font-size: 16px;
-            line-height: 1.6;
-        }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(15px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .hidden {
+            display: none;
         }
     </style>
 </head>
@@ -344,240 +289,264 @@
     <div id="root"></div>
     
     <script>
-        const { useState, useEffect } = React;
+        // Simple app state management
+        let currentUser = null;
+        let currentPage = 'dashboard';
+        let entries = [];
         
-        // Firebase Config
-        const firebaseConfig = {
-            apiKey: "AIzaSyBbMofd7wy8R_9YZsVM80bJr5iwELe9miM",
-            authDomain: "saheli-period-tracker.firebaseapp.com",
-            projectId: "saheli-period-tracker",
-            storageBucket: "saheli-period-tracker.firebasestorage.app",
-            messagingSenderId: "826367497127",
-            appId: "1:826367497127:web:b3bba5fcf4d12c696f1c82",
-            measurementId: "G-RQV4GGLMX3"
-        };
+        // Simple localStorage (works without Firebase)
+        function saveEntry(entry) {
+            entries.unshift(entry);
+            localStorage.setItem('entries', JSON.stringify(entries));
+            render();
+        }
         
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
+        function loadEntries() {
+            const saved = localStorage.getItem('entries');
+            if (saved) {
+                entries = JSON.parse(saved);
+            }
+        }
         
-        function AuthPage({ setUser }) {
-            const [email, setEmail] = useState('');
-            const [password, setPassword] = useState('');
-            const [isSignup, setIsSignup] = useState(false);
-            const [error, setError] = useState('');
-            const [loading, setLoading] = useState(false);
+        function login(email, password) {
+            if (email && password) {
+                currentUser = { email, uid: email.replace(/[@.]/g, '') };
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                loadEntries();
+                render();
+            }
+        }
+        
+        function signup(email, password) {
+            if (email && password && password.length >= 6) {
+                currentUser = { email, uid: email.replace(/[@.]/g, '') };
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                render();
+            }
+        }
+        
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('user');
+            render();
+        }
+        
+        function render() {
+            const root = document.getElementById('root');
             
-            const handleAuth = async () => {
-                setLoading(true);
-                try {
-                    if (isSignup) {
-                        const result = await auth.createUserWithEmailAndPassword(email, password);
-                        await db.collection('users').add({
-                            userId: result.user.uid,
-                            email: email,
-                            cycleLength: 28,
-                            periodLength: 5,
-                            lastPeriodDate: null,
-                            createdAt: new Date()
-                        });
-                    } else {
-                        await auth.signInWithEmailAndPassword(email, password);
-                    }
-                } catch (err) {
-                    setError(err.message);
-                }
-                setLoading(false);
-            };
-            
-            return (
-                <div className="auth-page">
-                    <div className="auth-box">
+            if (!currentUser) {
+                root.innerHTML = authPageHTML();
+                setupAuthListeners();
+            } else {
+                root.innerHTML = appHTML();
+                setupAppListeners();
+            }
+        }
+        
+        function authPageHTML() {
+            return `
+                <div class="auth-page">
+                    <div class="auth-box">
                         <h1>💜</h1>
                         <h2>Saheli</h2>
                         <p>Your Personal Health Sister</p>
-                        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} />
-                        <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading} />
-                        {error && <p className="error">{error}</p>}
-                        <button className="auth-btn" onClick={handleAuth} disabled={loading}>
-                            {loading ? 'Loading...' : (isSignup ? 'Sign Up' : 'Log In')}
-                        </button>
-                        <button className="toggle-btn" onClick={() => { setIsSignup(!isSignup); setError(''); }} disabled={loading}>
-                            {isSignup ? 'Already have account? Log In' : "Don't have account? Sign Up"}
-                        </button>
+                        <div id="error-msg"></div>
+                        <div class="form-group">
+                            <input type="email" id="email" placeholder="Email address">
+                        </div>
+                        <div class="form-group">
+                            <input type="password" id="password" placeholder="Password (min 6 chars)">
+                        </div>
+                        <button class="auth-btn" id="auth-btn">Log In</button>
+                        <button class="toggle-btn" id="toggle-btn">Don't have account? Sign Up</button>
                     </div>
                 </div>
-            );
+            `;
         }
         
-        function Dashboard({ entries }) {
-            const today = new Date().toISOString().split('T')[0];
-            const todayEntry = entries.find(e => e.date === today);
-            
-            return (
-                <div className="dashboard">
-                    <div className="dashboard-grid">
-                        <div className="card cycle-card">
-                            <h3>🔴 Cycle Status</h3>
-                            <p className="cycle-day">Track Started ✅</p>
-                        </div>
-                        
-                        <div className="card">
-                            <h3>📊 Today's Summary</h3>
-                            {todayEntry ? (
-                                <div>
-                                    <p>Mood: {todayEntry.mood || '—'}</p>
-                                    <p>Water: {todayEntry.water || 0} cups</p>
-                                </div>
-                            ) : (
-                                <p>No entry today yet</p>
-                            )}
-                        </div>
-                        
-                        <div className="card">
-                            <h3>📈 Stats</h3>
-                            <p>{entries.length} total entries</p>
-                            <p>Great tracking! Keep it up! 💜</p>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        
-        function LogEntry({ userId, onSave }) {
-            const [formData, setFormData] = useState({
-                date: new Date().toISOString().split('T')[0],
-                mood: '',
-                water: 8,
-                exercise: '',
-                notes: ''
-            });
-            const [loading, setLoading] = useState(false);
-            
-            const handleSubmit = async () => {
-                setLoading(true);
-                try {
-                    await db.collection('entries').add({
-                        userId,
-                        ...formData,
-                        timestamp: new Date()
-                    });
-                    alert('✅ Entry saved!');
-                    setFormData({
-                        date: new Date().toISOString().split('T')[0],
-                        mood: '',
-                        water: 8,
-                        exercise: '',
-                        notes: ''
-                    });
-                    onSave();
-                } catch (error) {
-                    alert('Error: ' + error.message);
-                }
-                setLoading(false);
-            };
-            
-            return (
-                <div className="log-entry">
-                    <h2>📝 Log Your Day</h2>
-                    
-                    <div className="form-section">
-                        <h3>😊 Mood & Health</h3>
-                        <label>
-                            How's your mood?
-                            <select value={formData.mood} onChange={(e) => setFormData({ ...formData, mood: e.target.value })}>
-                                <option>Select mood...</option>
-                                <option>😊 Happy</option>
-                                <option>😌 Calm</option>
-                                <option>😴 Tired</option>
-                                <option>😤 Stressed</option>
-                                <option>😢 Sad</option>
-                            </select>
-                        </label>
-                    </div>
-                    
-                    <div className="form-section">
-                        <h3>💧 Activity</h3>
-                        <label>
-                            Water intake (cups)
-                            <input type="number" value={formData.water} onChange={(e) => setFormData({ ...formData, water: parseInt(e.target.value) })} />
-                        </label>
-                        
-                        <label>
-                            Exercise
-                            <input type="text" placeholder="e.g., 30 min yoga" value={formData.exercise} onChange={(e) => setFormData({ ...formData, exercise: e.target.value })} />
-                        </label>
-                    </div>
-                    
-                    <div className="form-section">
-                        <h3>📝 Notes</h3>
-                        <label>
-                            How are you feeling?
-                            <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Add any notes..." />
-                        </label>
-                    </div>
-                    
-                    <button className="save-btn" onClick={handleSubmit} disabled={loading}>
-                        {loading ? '⏳ Saving...' : '✅ Save Entry'}
-                    </button>
-                </div>
-            );
-        }
-        
-        function App() {
-            const [user, setUser] = useState(null);
-            const [currentPage, setCurrentPage] = useState('dashboard');
-            const [entries, setEntries] = useState([]);
-            const [loading, setLoading] = useState(true);
-            
-            useEffect(() => {
-                auth.onAuthStateChanged(async (currentUser) => {
-                    setUser(currentUser);
-                    if (currentUser) {
-                        loadEntries(currentUser.uid);
-                    }
-                    setLoading(false);
-                });
-            }, []);
-            
-            const loadEntries = async (userId) => {
-                try {
-                    const snapshot = await db.collection('entries').where('userId', '==', userId).orderBy('date', 'desc').get();
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setEntries(data);
-                } catch (error) {
-                    console.error('Error loading entries:', error);
-                }
-            };
-            
-            if (loading) return <div className="loading">💜 Loading Saheli...</div>;
-            
-            if (!user) {
-                return <AuthPage setUser={setUser} />;
-            }
-            
-            return (
-                <div className="app">
-                    <header className="header">
+        function appHTML() {
+            return `
+                <div class="container">
+                    <header class="header">
                         <h1>💜 Saheli</h1>
-                        <button className="logout-btn" onClick={() => auth.signOut()}>Logout</button>
+                        <button class="logout-btn" id="logout-btn">Logout</button>
                     </header>
                     
-                    <nav className="nav">
-                        <button onClick={() => setCurrentPage('dashboard')} className={currentPage === 'dashboard' ? 'active' : ''}>📊 Dashboard</button>
-                        <button onClick={() => setCurrentPage('log')} className={currentPage === 'log' ? 'active' : ''}>📝 Log Entry</button>
+                    <nav class="nav">
+                        <button id="nav-dashboard" class="active">📊 Dashboard</button>
+                        <button id="nav-log">📝 Log Entry</button>
                     </nav>
                     
-                    <main className="main">
-                        {currentPage === 'dashboard' && <Dashboard entries={entries} />}
-                        {currentPage === 'log' && <LogEntry userId={user.uid} onSave={() => loadEntries(user.uid)} />}
+                    <main class="main">
+                        <div id="dashboard-page" class="page">
+                            <div class="dashboard-grid">
+                                <div class="card cycle-card">
+                                    <h3>🔴 Cycle Status</h3>
+                                    <p>Track your health journey</p>
+                                    <p style="font-size: 24px; color: #f472b6; margin-top: 10px;">✅ Ready</p>
+                                </div>
+                                
+                                <div class="card">
+                                    <h3>📊 Today's Summary</h3>
+                                    <div id="today-summary">No entry today yet</div>
+                                </div>
+                                
+                                <div class="card">
+                                    <h3>📈 Stats</h3>
+                                    <p>Total entries: <strong>${entries.length}</strong></p>
+                                    <p>Great tracking! Keep it up! 💜</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="log-page" class="page hidden">
+                            <div class="log-entry">
+                                <h2>📝 Log Your Day</h2>
+                                
+                                <div class="form-section">
+                                    <h3>😊 Mood & Health</h3>
+                                    <label>
+                                        How's your mood?
+                                        <select id="mood">
+                                            <option value="">Select mood...</option>
+                                            <option value="😊 Happy">😊 Happy</option>
+                                            <option value="😌 Calm">😌 Calm</option>
+                                            <option value="😴 Tired">😴 Tired</option>
+                                            <option value="😤 Stressed">😤 Stressed</option>
+                                            <option value="😢 Sad">😢 Sad</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                
+                                <div class="form-section">
+                                    <h3>💧 Activity</h3>
+                                    <label>
+                                        Water intake (cups)
+                                        <input type="number" id="water" value="8">
+                                    </label>
+                                    
+                                    <label>
+                                        Exercise
+                                        <input type="text" id="exercise" placeholder="e.g., 30 min yoga">
+                                    </label>
+                                </div>
+                                
+                                <div class="form-section">
+                                    <h3>📝 Notes</h3>
+                                    <label>
+                                        How are you feeling?
+                                        <textarea id="notes" placeholder="Add any notes..."></textarea>
+                                    </label>
+                                </div>
+                                
+                                <button class="save-btn" id="save-btn">✅ Save Entry</button>
+                            </div>
+                        </div>
                     </main>
                 </div>
-            );
+            `;
         }
         
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        function setupAuthListeners() {
+            let isSignup = false;
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const authBtn = document.getElementById('auth-btn');
+            const toggleBtn = document.getElementById('toggle-btn');
+            const errorMsg = document.getElementById('error-msg');
+            
+            authBtn.onclick = () => {
+                const email = emailInput.value.trim();
+                const password = passwordInput.value.trim();
+                
+                if (!email || !password) {
+                    errorMsg.innerHTML = '<div class="error">Please fill in all fields</div>';
+                    return;
+                }
+                
+                if (password.length < 6) {
+                    errorMsg.innerHTML = '<div class="error">Password must be at least 6 characters</div>';
+                    return;
+                }
+                
+                if (isSignup) {
+                    signup(email, password);
+                } else {
+                    login(email, password);
+                }
+            };
+            
+            toggleBtn.onclick = () => {
+                isSignup = !isSignup;
+                authBtn.textContent = isSignup ? 'Sign Up' : 'Log In';
+                toggleBtn.textContent = isSignup ? 'Already have account? Log In' : "Don't have account? Sign Up";
+                errorMsg.innerHTML = '';
+            };
+        }
+        
+        function setupAppListeners() {
+            document.getElementById('logout-btn').onclick = logout;
+            
+            document.getElementById('nav-dashboard').onclick = () => {
+                currentPage = 'dashboard';
+                document.getElementById('dashboard-page').classList.remove('hidden');
+                document.getElementById('log-page').classList.add('hidden');
+                document.getElementById('nav-dashboard').classList.add('active');
+                document.getElementById('nav-log').classList.remove('active');
+            };
+            
+            document.getElementById('nav-log').onclick = () => {
+                currentPage = 'log';
+                document.getElementById('dashboard-page').classList.add('hidden');
+                document.getElementById('log-page').classList.remove('hidden');
+                document.getElementById('nav-dashboard').classList.remove('active');
+                document.getElementById('nav-log').classList.add('active');
+            };
+            
+            document.getElementById('save-btn').onclick = () => {
+                const entry = {
+                    date: new Date().toISOString().split('T')[0],
+                    mood: document.getElementById('mood').value,
+                    water: parseInt(document.getElementById('water').value),
+                    exercise: document.getElementById('exercise').value,
+                    notes: document.getElementById('notes').value,
+                    timestamp: new Date().toISOString()
+                };
+                
+                saveEntry(entry);
+                
+                // Reset form
+                document.getElementById('mood').value = '';
+                document.getElementById('water').value = 8;
+                document.getElementById('exercise').value = '';
+                document.getElementById('notes').value = '';
+                
+                alert('✅ Entry saved!');
+            };
+            
+            // Update today's summary
+            const today = new Date().toISOString().split('T')[0];
+            const todayEntry = entries.find(e => e.date === today);
+            const todaySummary = document.getElementById('today-summary');
+            
+            if (todayEntry) {
+                todaySummary.innerHTML = `
+                    <p>Mood: ${todayEntry.mood || '—'}</p>
+                    <p>Water: ${todayEntry.water || 0} cups</p>
+                    <p>Exercise: ${todayEntry.exercise || '—'}</p>
+                `;
+            }
+        }
+        
+        // Check if user is logged in on page load
+        window.addEventListener('load', () => {
+            const saved = localStorage.getItem('user');
+            if (saved) {
+                currentUser = JSON.parse(saved);
+                loadEntries();
+            }
+            render();
+        });
     </script>
 </body>
 </html>
