@@ -16,23 +16,23 @@ export default function SaheliApp() {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  const loadData = () => {
     try {
-      const cycleResult = await window.storage.get('cycle-data');
-      const logsResult = await window.storage.get('daily-logs');
-      const insightsResult = await window.storage.get('health-insights');
+      const savedCycle = localStorage.getItem('saheli-cycle-data');
+      const savedLogs = localStorage.getItem('saheli-daily-logs');
+      const savedInsights = localStorage.getItem('saheli-health-insights');
       
-      if (cycleResult) setCycleData(JSON.parse(cycleResult.value));
-      if (logsResult) setDailyLogs(JSON.parse(logsResult.value));
-      if (insightsResult) setHealthInsights(JSON.parse(insightsResult.value));
+      if (savedCycle) setCycleData(JSON.parse(savedCycle));
+      if (savedLogs) setDailyLogs(JSON.parse(savedLogs));
+      if (savedInsights) setHealthInsights(JSON.parse(savedInsights));
     } catch (error) {
       console.log('No existing data, starting fresh');
     }
   };
 
-  const saveData = async (type, data) => {
+  const saveData = (type, data) => {
     try {
-      await window.storage.set(type, JSON.stringify(data));
+      localStorage.setItem(type, JSON.stringify(data));
     } catch (error) {
       console.error('Error saving data:', error);
     }
@@ -43,15 +43,15 @@ export default function SaheliApp() {
     return dailyLogs[dateKey] || {};
   };
 
-  const saveDayLog = async (date, logData) => {
+  const saveDayLog = (date, logData) => {
     const dateKey = date.toISOString().split('T')[0];
     const newLogs = { ...dailyLogs, [dateKey]: logData };
     setDailyLogs(newLogs);
-    await saveData('daily-logs', newLogs);
+    saveData('saheli-daily-logs', newLogs);
     analyzeHealthPattern(newLogs);
   };
 
-  const analyzeHealthPattern = async (logs) => {
+  const analyzeHealthPattern = (logs) => {
     const recentLogs = Object.entries(logs).slice(-30);
     const insights = [];
 
@@ -89,7 +89,7 @@ export default function SaheliApp() {
     }
 
     setHealthInsights(insights);
-    await saveData('health-insights', insights);
+    saveData('saheli-health-insights', insights);
   };
 
   const calculateCycleDay = () => {
