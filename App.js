@@ -1,722 +1,539 @@
 import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import './App.css';
+import { Calendar, Heart, Droplet, Activity, Utensils, Pill, Users, AlertCircle, TrendingUp, Moon } from 'lucide-react';
 
-// Your Firebase Config (paste your config from Firebase Console)
-const firebaseConfig = {
-  apiKey: "AIzaSyBbMofd7wy8R_9YZsVM80bJr5iwELe9miM",
-  authDomain: "saheli-period-tracker.firebaseapp.com",
-  projectId: "saheli-period-tracker",
-  storageBucket: "saheli-period-tracker.firebasestorage.app",
-  messagingSenderId: "826367497127",
-  appId: "1:826367497127:web:b3bba5fcf4d12c696f1c82",
-  measurementId: "G-RQV4GGLMX3"
-};
+export default function SaheliApp() {
+  const [currentView, setCurrentView] = useState('dashboard');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [cycleData, setCycleData] = useState({
+    lastPeriodStart: null,
+    cycleLength: 28,
+    periodLength: 5
+  });
+  const [dailyLogs, setDailyLogs] = useState({});
+  const [healthInsights, setHealthInsights] = useState([]);
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState(null);
-
-  // Check if user is logged in
   useEffect(() => {
-    onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        loadEntries(currentUser.uid);
-        loadUserData(currentUser.uid);
-      }
-      setLoading(false);
-    });
+    loadData();
   }, []);
 
-  // Load user's entries from Firestore
-  const loadEntries = async (userId) => {
+  const loadData = async () => {
     try {
-      const q = query(
-        collection(db, 'entries'),
-        where('userId', '==', userId),
-        orderBy('date', 'desc')
-      );
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setEntries(data);
+      const cycleResult = await window.storage.get('cycle-data');
+      const logsResult = await window.storage.get('daily-logs');
+      const insightsResult = await window.storage.get('health-insights');
+      
+      if (cycleResult) setCycleData(JSON.parse(cycleResult.value));
+      if (logsResult) setDailyLogs(JSON.parse(logsResult.value));
+      if (insightsResult) setHealthInsights(JSON.parse(insightsResult.value));
     } catch (error) {
-      console.error('Error loading entries:', error);
+      console.log('No existing data, starting fresh');
     }
   };
 
-  // Load user cycle data
-  const loadUserData = async (userId) => {
+  const saveData = async (type, data) => {
     try {
-      const q = query(
-        collection(db, 'users'),
-        where('userId', '==', userId),
-        limit(1)
-      );
-      const querySnapshot = await getDocs(q);
-      if (querySnapshot.docs.length > 0) {
-        setUserData(querySnapshot.docs[0].data());
-      }
+      await window.storage.set(type, JSON.stringify(data));
     } catch (error) {
-      console.error('Error loading user data:', error);
+      console.error('Error saving data:', error);
     }
   };
 
-  if (loading) return <div className="loading">💜 Loading Saheli...</div>;
-
-  if (!user) {
-    return <AuthPage />;
-  }
-
-  return (
-    <div className="app">
-      <header className="header">
-        <div className="header-left">
-          <h1>💜 Saheli</h1>
-          <p className="tagline">Your Personal Health Sister</p>
-        </div>
-        <div className="header-right">
-          <span className="user-email">{user.email}</span>
-          <button className="logout-btn" onClick={() => signOut(auth)}>Logout</button>
-        </div>
-      </header>
-
-      <nav className="nav">
-        <button onClick={() => setCurrentPage('dashboard')} className={currentPage === 'dashboard' ? 'active' : ''}>📊 Dashboard</button>
-        <button onClick={() => setCurrentPage('log')} className={currentPage === 'log' ? 'active' : ''}>📝 Log Entry</button>
-        <button onClick={() => setCurrentPage('calendar')} className={currentPage === 'calendar' ? 'active' : ''}>📅 Calendar</button>
-        <button onClick={() => setCurrentPage('cycle')} className={currentPage === 'cycle' ? 'active' : ''}>🔴 Cycle</button>
-        <button onClick={() => setCurrentPage('insights')} className={currentPage === 'insights' ? 'active' : ''}>🔍 Insights</button>
-      </nav>
-
-      <main className="main">
-        {currentPage === 'dashboard' && <Dashboard entries={entries} user={user} />}
-        {currentPage === 'log' && <LogEntry userId={user.uid} onSave={() => loadEntries(user.uid)} />}
-        {currentPage === 'calendar' && <Calendar entries={entries} />}
-        {currentPage === 'cycle' && <CycleTracker userId={user.uid} />}
-        {currentPage === 'insights' && <Insights entries={entries} userData={userData} />}
-      </main>
-    </div>
-  );
-}
-
-// ============ AUTH PAGE ============
-function AuthPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignup, setIsSignup] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleAuth = async () => {
-    setLoading(true);
-    try {
-      if (isSignup) {
-        const result = await createUserWithEmailAndPassword(auth, email, password);
-        // Create user document in Firestore
-        await addDoc(collection(db, 'users'), {
-          userId: result.user.uid,
-          email: email,
-          cycleLength: 28,
-          periodLength: 5,
-          lastPeriodDate: null,
-          supplements: [],
-          createdAt: new Date()
-        });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    }
-    setLoading(false);
+  const getDayLog = (date) => {
+    const dateKey = date.toISOString().split('T')[0];
+    return dailyLogs[dateKey] || {};
   };
 
-  return (
-    <div className="auth-page">
-      <div className="auth-box">
-        <h1>💜 Saheli</h1>
-        <h2>Your Personal Health Sister</h2>
-        <p>Track your period, moods, health & wellness</p>
-        
-        <input 
-          type="email" 
-          placeholder="Email address" 
-          value={email} 
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-        />
-        <input 
-          type="password" 
-          placeholder="Password (min 6 characters)" 
-          value={password} 
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-        />
-        
-        {error && <p className="error">⚠️ {error}</p>}
-        
-        <button onClick={handleAuth} disabled={loading} className="auth-btn">
-          {loading ? 'Loading...' : (isSignup ? 'Create Account' : 'Log In')}
-        </button>
-        
-        <button className="toggle-btn" onClick={() => { setIsSignup(!isSignup); setError(''); }} disabled={loading}>
-          {isSignup ? '✨ Already have account? Log In' : "✨ Don't have account? Sign Up"}
-        </button>
-      </div>
-    </div>
-  );
-}
+  const saveDayLog = async (date, logData) => {
+    const dateKey = date.toISOString().split('T')[0];
+    const newLogs = { ...dailyLogs, [dateKey]: logData };
+    setDailyLogs(newLogs);
+    await saveData('daily-logs', newLogs);
+    analyzeHealthPattern(newLogs);
+  };
 
-// ============ DASHBOARD PAGE ============
-function Dashboard({ entries, user }) {
-  const today = new Date().toISOString().split('T')[0];
-  const todayEntry = entries.find(e => e.date === today);
-  const lastSevenDays = entries.slice(0, 7);
-  const avgMood = lastSevenDays.length > 0 
-    ? Math.round((lastSevenDays.filter(e => e.mood).length / lastSevenDays.length) * 100)
-    : 0;
+  const analyzeHealthPattern = async (logs) => {
+    const recentLogs = Object.entries(logs).slice(-30);
+    const insights = [];
 
-  // Calculate cycle day
-  const getCycleDay = () => {
-    if (!entries.length) return '—';
-    const lastMenstrualEntry = entries.find(e => e.menstrualFlow && e.menstrualFlow !== 'None');
-    if (!lastMenstrualEntry) return '?';
-    const lastDate = new Date(lastMenstrualEntry.date);
+    // Water intake analysis
+    const waterIntakes = recentLogs.map(([_, log]) => log.water || 0);
+    const avgWater = waterIntakes.reduce((a, b) => a + b, 0) / waterIntakes.length;
+    if (avgWater < 6) {
+      insights.push({
+        type: 'warning',
+        message: 'Your water intake is below recommended levels. Consider drinking more water.',
+        severity: 'medium'
+      });
+    }
+
+    // Mood pattern analysis
+    const lowMoodDays = recentLogs.filter(([_, log]) => 
+      ['sad', 'anxious', 'irritable'].includes(log.mood)
+    ).length;
+    if (lowMoodDays > 10) {
+      insights.push({
+        type: 'alert',
+        message: 'Persistent low mood detected. Consider consulting a healthcare provider.',
+        severity: 'high'
+      });
+    }
+
+    // Exercise tracking
+    const exerciseDays = recentLogs.filter(([_, log]) => log.exercise).length;
+    if (exerciseDays < 8) {
+      insights.push({
+        type: 'info',
+        message: 'Low physical activity. Regular exercise can help manage PMS symptoms.',
+        severity: 'low'
+      });
+    }
+
+    setHealthInsights(insights);
+    await saveData('health-insights', insights);
+  };
+
+  const calculateCycleDay = () => {
+    if (!cycleData.lastPeriodStart) return null;
+    const lastPeriod = new Date(cycleData.lastPeriodStart);
     const today = new Date();
-    const diffTime = Math.abs(today - lastDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    const diff = Math.floor((today - lastPeriod) / (1000 * 60 * 60 * 24));
+    return (diff % cycleData.cycleLength) + 1;
   };
 
-  return (
-    <div className="dashboard">
-      <div className="dashboard-grid">
-        {/* Cycle Status Card */}
-        <div className="card cycle-card">
-          <div className="card-header">
-            <h3>🔴 Cycle Status</h3>
-          </div>
-          <div className="cycle-info">
-            <p className="cycle-day">Day <span>{getCycleDay()}</span></p>
-            <p className="cycle-sub">{todayEntry?.menstrualFlow || 'No flow recorded'}</p>
-          </div>
-        </div>
+  const getCyclePhase = (day) => {
+    if (day <= cycleData.periodLength) return 'Menstruation';
+    if (day <= 14) return 'Follicular Phase';
+    if (day <= 16) return 'Ovulation';
+    return 'Luteal Phase';
+  };
 
-        {/* Today's Overview */}
-        <div className="card today-card">
-          <div className="card-header">
-            <h3>📊 Today's Overview</h3>
-            <span className="date-badge">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+  const renderCalendar = () => {
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+
+    const days = [];
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(<div key={`empty-${i}`} className="p-2"></div>);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateKey = date.toISOString().split('T')[0];
+      const hasLog = dailyLogs[dateKey];
+      const isPeriod = hasLog?.isPeriod;
+      
+      days.push(
+        <button
+          key={day}
+          onClick={() => {
+            setSelectedDate(date);
+            setCurrentView('log');
+          }}
+          className={`p-2 rounded-lg border-2 hover:border-purple-400 transition-all ${
+            isPeriod ? 'bg-red-100 border-red-300' : hasLog ? 'bg-purple-50 border-purple-200' : 'border-gray-200'
+          }`}
+        >
+          <div className="text-sm font-medium">{day}</div>
+          {hasLog && (
+            <div className="flex gap-1 mt-1 justify-center">
+              {hasLog.mood && <div className="w-1.5 h-1.5 bg-purple-400 rounded-full"></div>}
+              {hasLog.water && <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>}
+              {hasLog.exercise && <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>}
+            </div>
+          )}
+        </button>
+      );
+    }
+
+    return days;
+  };
+
+  const renderDashboard = () => {
+    const cycleDay = calculateCycleDay();
+    const phase = cycleDay ? getCyclePhase(cycleDay) : 'Not tracked';
+
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gradient-to-br from-pink-100 to-purple-100 p-6 rounded-xl shadow-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Heart className="text-pink-500" size={24} />
+              <h3 className="font-semibold text-gray-800">Cycle Status</h3>
+            </div>
+            <div className="text-3xl font-bold text-purple-600 mb-1">
+              {cycleDay ? `Day ${cycleDay}` : 'Ready'}
+            </div>
+            <p className="text-sm text-gray-600">{phase}</p>
           </div>
-          {todayEntry ? (
-            <div className="today-items">
-              <div className="today-item">
-                <span>😊 Mood:</span>
-                <strong>{todayEntry.mood || '—'}</strong>
-              </div>
-              <div className="today-item">
-                <span>💧 Water:</span>
-                <strong>{todayEntry.water || 0} cups</strong>
-              </div>
-              <div className="today-item">
-                <span>🏃 Exercise:</span>
-                <strong>{todayEntry.exercise || '—'}</strong>
-              </div>
-              <div className="today-item">
-                <span>🍽️ Food:</span>
-                <strong>{todayEntry.meal ? todayEntry.meal.substring(0, 20) + '...' : '—'}</strong>
-              </div>
-              {todayEntry.pms && (
-                <div className="today-item pms-badge">
-                  <span>⚠️ PMS Symptoms:</span>
-                  <strong>{todayEntry.pms}</strong>
-                </div>
+
+          <div className="bg-gradient-to-br from-blue-100 to-cyan-100 p-6 rounded-xl shadow-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="text-blue-500" size={24} />
+              <h3 className="font-semibold text-gray-800">Today's Summary</h3>
+            </div>
+            <div className="text-sm text-gray-700">
+              {getDayLog(new Date()).mood ? (
+                <div>Logged for today ✓</div>
+              ) : (
+                <div>No entry today yet</div>
               )}
             </div>
-          ) : (
-            <p className="no-entry">📝 No entry today yet</p>
-          )}
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-100 to-pink-100 p-6 rounded-xl shadow-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="text-purple-500" size={24} />
+              <h3 className="font-semibold text-gray-800">Stats</h3>
+            </div>
+            <div className="text-2xl font-bold text-purple-600">
+              {Object.keys(dailyLogs).length}
+            </div>
+            <p className="text-sm text-gray-600">Total entries</p>
+          </div>
         </div>
 
-        {/* This Week Stats */}
-        <div className="card stats-card">
-          <div className="card-header">
-            <h3>📈 This Week</h3>
+        {healthInsights.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="text-orange-500" size={24} />
+              <h3 className="font-semibold text-gray-800">Health Insights</h3>
+            </div>
+            <div className="space-y-3">
+              {healthInsights.map((insight, idx) => (
+                <div key={idx} className={`p-4 rounded-lg ${
+                  insight.severity === 'high' ? 'bg-red-50 border-l-4 border-red-400' :
+                  insight.severity === 'medium' ? 'bg-orange-50 border-l-4 border-orange-400' :
+                  'bg-blue-50 border-l-4 border-blue-400'
+                }`}>
+                  <p className="text-sm text-gray-700">{insight.message}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="stats-grid">
-            <div className="stat">
-              <p className="stat-number">{lastSevenDays.length}</p>
-              <p className="stat-label">Days tracked</p>
-            </div>
-            <div className="stat">
-              <p className="stat-number">{avgMood}%</p>
-              <p className="stat-label">Mood tracked</p>
-            </div>
-            <div className="stat">
-              <p className="stat-number">{Math.round(lastSevenDays.reduce((sum, e) => sum + (e.water || 0), 0) / (lastSevenDays.length || 1))}</p>
-              <p className="stat-label">Avg water/day</p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-// ============ LOG ENTRY PAGE ============
-function LogEntry({ userId, onSave }) {
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    mood: '',
-    meal: '',
-    calories: '',
-    water: 8,
-    exercise: '',
-    menstrualFlow: 'None',
-    menstrualProduct: 'None',
-    pms: '',
-    absent: false,
-    supplements: false,
-    deficiencyCheck: '',
-    notes: ''
-  });
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      await addDoc(collection(db, 'entries'), {
-        userId,
-        ...formData,
-        timestamp: new Date()
-      });
-      alert('✅ Entry saved successfully!');
-      setFormData({
-        date: new Date().toISOString().split('T')[0],
-        mood: '',
-        meal: '',
-        calories: '',
-        water: 8,
-        exercise: '',
-        menstrualFlow: 'None',
-        menstrualProduct: 'None',
-        pms: '',
-        absent: false,
-        supplements: false,
-        deficiencyCheck: '',
-        notes: ''
-      });
-      onSave();
-    } catch (error) {
-      alert('❌ Error saving entry: ' + error.message);
-    }
-    setLoading(false);
+    );
   };
 
-  const moodOptions = ['😊 Happy', '😌 Calm', '😴 Tired', '😤 Stressed', '😢 Sad', '😡 Angry', '🤔 Confused'];
-  const menstrualFlowOptions = ['None', 'Light', 'Moderate', 'Heavy'];
-  const pmsOptions = ['None', 'Cramps', 'Bloating', 'Headache', 'Fatigue', 'Mood swings', 'Breast tenderness', 'Multiple'];
+  const renderLogEntry = () => {
+    const currentLog = getDayLog(selectedDate);
+    const [logData, setLogData] = useState(currentLog);
 
-  return (
-    <div className="log-entry">
-      <div className="log-header">
-        <h2>📝 Log Your Day</h2>
-        <p className="log-date">{new Date(formData.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
-      </div>
+    const handleSave = () => {
+      saveDayLog(selectedDate, logData);
+      setCurrentView('calendar');
+    };
 
-      <div className="form-section">
-        <h3>😊 Mood & Mental Health</h3>
-        
-        <label>How's your mood today?
-          <select value={formData.mood} onChange={(e) => setFormData({ ...formData, mood: e.target.value })}>
-            <option value="">Select mood...</option>
-            {moodOptions.map(mood => <option key={mood} value={mood}>{mood}</option>)}
-          </select>
-        </label>
+    return (
+      <div className="bg-white rounded-xl shadow-lg p-6 max-w-3xl mx-auto">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800">
+          Log Your Day - {selectedDate.toLocaleDateString()}
+        </h2>
 
-        <label>Any PMS symptoms?
-          <select value={formData.pms} onChange={(e) => setFormData({ ...formData, pms: e.target.value })}>
-            {pmsOptions.map(symptom => <option key={symptom} value={symptom}>{symptom}</option>)}
-          </select>
-        </label>
-
-        <label>How are you feeling overall?
-          <textarea 
-            placeholder="Describe your mental state..." 
-            value={formData.notes} 
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          />
-        </label>
-      </div>
-
-      <div className="form-section">
-        <h3>🔴 Menstrual Health</h3>
-        
-        <label>Menstrual flow
-          <select value={formData.menstrualFlow} onChange={(e) => setFormData({ ...formData, menstrualFlow: e.target.value })}>
-            {menstrualFlowOptions.map(flow => <option key={flow} value={flow}>{flow}</option>)}
-          </select>
-        </label>
-
-        <label>Product used
-          <select value={formData.menstrualProduct} onChange={(e) => setFormData({ ...formData, menstrualProduct: e.target.value })}>
-            <option value="None">None</option>
-            <option value="Pad">Pad</option>
-            <option value="Tampon">Tampon</option>
-            <option value="Cup">Menstrual Cup</option>
-            <option value="Disc">Disc</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="form-section">
-        <h3>🍽️ Nutrition</h3>
-        
-        <label>What did you eat? (describe meals)
-          <input 
-            type="text" 
-            placeholder="e.g., Salad with grilled chicken, rice, juice" 
-            value={formData.meal} 
-            onChange={(e) => setFormData({ ...formData, meal: e.target.value })}
-          />
-        </label>
-
-        <label>Estimated calories
-          <input 
-            type="number" 
-            placeholder="Approximate calories" 
-            value={formData.calories} 
-            onChange={(e) => setFormData({ ...formData, calories: e.target.value })}
-          />
-        </label>
-      </div>
-
-      <div className="form-section">
-        <h3>💪 Activity</h3>
-        
-        <label>Water intake (cups)
-          <input 
-            type="number" 
-            min="0" 
-            value={formData.water} 
-            onChange={(e) => setFormData({ ...formData, water: parseInt(e.target.value) || 0 })}
-          />
-        </label>
-
-        <label>Exercise
-          <input 
-            type="text" 
-            placeholder="e.g., 30 min yoga, 5km run" 
-            value={formData.exercise} 
-            onChange={(e) => setFormData({ ...formData, exercise: e.target.value })}
-          />
-        </label>
-
-        <label>
-          <input 
-            type="checkbox" 
-            checked={formData.absent} 
-            onChange={(e) => setFormData({ ...formData, absent: e.target.checked })}
-          />
-          Absent from school/work
-        </label>
-      </div>
-
-      <div className="form-section">
-        <h3>💊 Health Check</h3>
-        
-        <label>
-          <input 
-            type="checkbox" 
-            checked={formData.supplements} 
-            onChange={(e) => setFormData({ ...formData, supplements: e.target.checked })}
-          />
-          Took supplements/vitamins
-        </label>
-
-        <label>Deficiency warning signs?
-          <select value={formData.deficiencyCheck} onChange={(e) => setFormData({ ...formData, deficiencyCheck: e.target.value })}>
-            <option value="">None</option>
-            <option value="dizziness">Dizziness/Lightheadedness</option>
-            <option value="extreme_fatigue">Extreme Fatigue</option>
-            <option value="hair_loss">Hair Loss</option>
-            <option value="pale_skin">Pale Skin</option>
-            <option value="shortness_breath">Shortness of Breath</option>
-            <option value="brittle_nails">Brittle Nails</option>
-          </select>
-        </label>
-      </div>
-
-      <button onClick={handleSubmit} disabled={loading} className="save-btn">
-        {loading ? '⏳ Saving...' : '✅ Save Entry'}
-      </button>
-    </div>
-  );
-}
-
-// ============ CALENDAR PAGE ============
-function Calendar({ entries }) {
-  const today = new Date();
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
-  
-  const firstDay = new Date(currentYear, currentMonth, 1);
-  const lastDay = new Date(currentYear, currentMonth + 1, 0);
-  const daysInMonth = lastDay.getDate();
-  const startingDayOfWeek = firstDay.getDay();
-  
-  const days = [];
-  for (let i = 0; i < startingDayOfWeek; i++) {
-    days.push(null);
-  }
-  for (let i = 1; i <= daysInMonth; i++) {
-    days.push(i);
-  }
-
-  return (
-    <div className="calendar">
-      <h2>{today.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
-      
-      <div className="calendar-weekdays">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} className="weekday">{day}</div>
-        ))}
-      </div>
-
-      <div className="calendar-grid">
-        {days.map((day, idx) => {
-          if (!day) return <div key={`empty-${idx}`} className="calendar-day empty"></div>;
-          
-          const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          const entry = entries.find(e => e.date === dateStr);
-          const hasMenstrualFlow = entry?.menstrualFlow && entry.menstrualFlow !== 'None';
-          const hasEntry = !!entry;
-
-          return (
-            <div 
-              key={day} 
-              className={`calendar-day ${hasEntry ? 'has-entry' : ''} ${hasMenstrualFlow ? 'menstrual' : ''}`}
-              title={entry ? `Mood: ${entry.mood || '—'}, Flow: ${entry.menstrualFlow}` : 'No entry'}
+        <div className="space-y-6">
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-purple-600 mb-2">
+              <Heart size={18} />
+              Mood & Health
+            </label>
+            <select 
+              value={logData.mood || ''}
+              onChange={(e) => setLogData({...logData, mood: e.target.value})}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-purple-400 outline-none"
             >
-              <div className="day-number">{day}</div>
-              {hasMenstrualFlow && <div className="flow-dot">●</div>}
-              {hasEntry && !hasMenstrualFlow && <div className="entry-dot">○</div>}
+              <option value="">Select mood...</option>
+              <option value="happy">😊 Happy</option>
+              <option value="calm">😌 Calm</option>
+              <option value="energetic">⚡ Energetic</option>
+              <option value="tired">😴 Tired</option>
+              <option value="sad">😢 Sad</option>
+              <option value="anxious">😰 Anxious</option>
+              <option value="irritable">😠 Irritable</option>
+              <option value="stressed">😫 Stressed</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-pink-600 mb-2">
+              <Moon size={18} />
+              Period Status
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input 
+                  type="checkbox"
+                  checked={logData.isPeriod || false}
+                  onChange={(e) => setLogData({...logData, isPeriod: e.target.checked})}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm">On period</span>
+              </label>
+              {logData.isPeriod && (
+                <select 
+                  value={logData.flow || ''}
+                  onChange={(e) => setLogData({...logData, flow: e.target.value})}
+                  className="p-2 border-2 border-gray-200 rounded-lg text-sm"
+                >
+                  <option value="">Flow...</option>
+                  <option value="light">Light</option>
+                  <option value="medium">Medium</option>
+                  <option value="heavy">Heavy</option>
+                </select>
+              )}
             </div>
-          );
-        })}
+            {logData.isPeriod && (
+              <select 
+                value={logData.product || ''}
+                onChange={(e) => setLogData({...logData, product: e.target.value})}
+                className="w-full p-3 border-2 border-gray-200 rounded-lg mt-2"
+              >
+                <option value="">Product used...</option>
+                <option value="pad">Pad</option>
+                <option value="tampon">Tampon</option>
+                <option value="cup">Menstrual Cup</option>
+                <option value="disc">Menstrual Disc</option>
+                <option value="period-underwear">Period Underwear</option>
+              </select>
+            )}
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-blue-600 mb-2">
+              <Droplet size={18} />
+              Water Intake (cups)
+            </label>
+            <input 
+              type="number"
+              value={logData.water || ''}
+              onChange={(e) => setLogData({...logData, water: parseInt(e.target.value)})}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg"
+              placeholder="8"
+              min="0"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-green-600 mb-2">
+              <Activity size={18} />
+              Exercise
+            </label>
+            <input 
+              type="text"
+              value={logData.exercise || ''}
+              onChange={(e) => setLogData({...logData, exercise: e.target.value})}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg"
+              placeholder="e.g., 30 min walk, yoga"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-orange-600 mb-2">
+              <Utensils size={18} />
+              Meals & Calories
+            </label>
+            <textarea 
+              value={logData.meals || ''}
+              onChange={(e) => setLogData({...logData, meals: e.target.value})}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg"
+              placeholder="Describe your meals (AI will estimate calories)"
+              rows="3"
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-purple-600 mb-2">
+              <Pill size={18} />
+              Supplements & Medications
+            </label>
+            <input 
+              type="text"
+              value={logData.supplements || ''}
+              onChange={(e) => setLogData({...logData, supplements: e.target.value})}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg"
+              placeholder="e.g., Vitamin D, Iron"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-600 mb-2 block">
+              Symptoms (select all that apply)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {['cramps', 'headache', 'bloating', 'acne', 'fatigue', 'backache', 'breast-tenderness', 'nausea'].map(symptom => (
+                <label key={symptom} className="flex items-center gap-2 text-sm">
+                  <input 
+                    type="checkbox"
+                    checked={logData.symptoms?.includes(symptom) || false}
+                    onChange={(e) => {
+                      const symptoms = logData.symptoms || [];
+                      setLogData({
+                        ...logData,
+                        symptoms: e.target.checked 
+                          ? [...symptoms, symptom]
+                          : symptoms.filter(s => s !== symptom)
+                      });
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="capitalize">{symptom.replace('-', ' ')}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-600 mb-2 block">
+              Notes
+            </label>
+            <textarea 
+              value={logData.notes || ''}
+              onChange={(e) => setLogData({...logData, notes: e.target.value})}
+              className="w-full p-3 border-2 border-gray-200 rounded-lg"
+              placeholder="Any additional notes..."
+              rows="2"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input 
+              type="checkbox"
+              checked={logData.absent || false}
+              onChange={(e) => setLogData({...logData, absent: e.target.checked})}
+              className="w-4 h-4"
+            />
+            <span>Absent from work/school today</span>
+          </label>
+
+          <div className="flex gap-3 pt-4">
+            <button 
+              onClick={handleSave}
+              className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all"
+            >
+              Save Entry
+            </button>
+            <button 
+              onClick={() => setCurrentView('calendar')}
+              className="px-6 py-3 border-2 border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
-
-      <div className="calendar-legend">
-        <div className="legend-item"><span className="flow-indicator">●</span> Menstrual Flow</div>
-        <div className="legend-item"><span className="entry-indicator">○</span> Entry Logged</div>
-      </div>
-    </div>
-  );
-}
-
-// ============ CYCLE TRACKER PAGE ============
-function CycleTracker({ userId }) {
-  const [cycleData, setCycleData] = useState({
-    cycleLength: 28,
-    periodLength: 5,
-    lastPeriodDate: ''
-  });
-  const [saved, setSaved] = useState(false);
-
-  const handleSaveCycle = async () => {
-    try {
-      await addDoc(collection(db, 'users'), {
-        userId,
-        ...cycleData,
-        updatedAt: new Date()
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (error) {
-      alert('Error: ' + error.message);
-    }
+    );
   };
 
-  const predictNextPeriod = () => {
-    if (!cycleData.lastPeriodDate) return 'Set your last period date';
-    const last = new Date(cycleData.lastPeriodDate);
-    const next = new Date(last.getTime() + cycleData.cycleLength * 24 * 60 * 60 * 1000);
-    return next.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  return (
-    <div className="cycle-tracker">
-      <h2>🔴 Cycle Information</h2>
-      
-      <div className="cycle-info-card">
-        <label>Average cycle length (days)
-          <input 
-            type="number" 
-            min="20" 
-            max="40" 
-            value={cycleData.cycleLength}
-            onChange={(e) => setCycleData({ ...cycleData, cycleLength: parseInt(e.target.value) })}
-          />
-          <small>Usually 21-35 days</small>
-        </label>
-
-        <label>Average period length (days)
-          <input 
-            type="number" 
-            min="2" 
-            max="10" 
-            value={cycleData.periodLength}
-            onChange={(e) => setCycleData({ ...cycleData, periodLength: parseInt(e.target.value) })}
-          />
-          <small>Usually 3-7 days</small>
-        </label>
-
-        <label>Last period start date
-          <input 
-            type="date" 
-            value={cycleData.lastPeriodDate}
-            onChange={(e) => setCycleData({ ...cycleData, lastPeriodDate: e.target.value })}
-          />
-        </label>
-
-        <div className="prediction-box">
-          <h4>📅 Next Period Prediction</h4>
-          <p className="prediction">{predictNextPeriod()}</p>
+  const renderCalendarView = () => {
+    return (
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">
+            {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </h2>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1))}
+              className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+            >
+              ←
+            </button>
+            <button 
+              onClick={() => setSelectedDate(new Date())}
+              className="px-4 py-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
+            >
+              Today
+            </button>
+            <button 
+              onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1))}
+              className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+            >
+              →
+            </button>
+          </div>
         </div>
 
-        <button onClick={handleSaveCycle} className="save-btn">
-          {saved ? '✅ Saved!' : '💾 Save Cycle Info'}
-        </button>
-      </div>
-
-      <div className="cycle-info-box">
-        <h3>📚 Cycle Phases</h3>
-        <div className="phase">
-          <h4>🔴 Menstruation (Days 1-5)</h4>
-          <p>Focus on iron-rich foods, rest, and hydration</p>
-        </div>
-        <div className="phase">
-          <h4>🟡 Follicular (Days 1-13)</h4>
-          <p>Energy increases, good time for exercise</p>
-        </div>
-        <div className="phase">
-          <h4>🟢 Ovulation (Days 13-15)</h4>
-          <p>Peak energy and confidence</p>
-        </div>
-        <div className="phase">
-          <h4>🟠 Luteal (Days 15-28)</h4>
-          <p>May experience PMS, need extra self-care</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============ INSIGHTS PAGE ============
-function Insights({ entries, userData }) {
-  const lastThirtyDays = entries.slice(0, 30);
-  const avgWater = lastThirtyDays.length ? Math.round(lastThirtyDays.reduce((sum, e) => sum + (e.water || 0), 0) / lastThirtyDays.length) : 0;
-  const exerciseDays = lastThirtyDays.filter(e => e.exercise && e.exercise.length > 0).length;
-  const hasMenstrualIssues = lastThirtyDays.filter(e => e.menstrualFlow === 'Heavy').length;
-  const deficiencyWarnings = lastThirtyDays.filter(e => e.deficiencyCheck && e.deficiencyCheck.length > 0);
-
-  const getHealthAlert = () => {
-    const alerts = [];
-    
-    if (avgWater < 6) alerts.push('💧 Low water intake - aim for 8+ cups daily');
-    if (exerciseDays < 3 && lastThirtyDays.length >= 7) alerts.push('🏃 Exercise less than 3 times/week - increase activity');
-    if (hasMenstrualIssues > 2) alerts.push('⚠️ Heavy flow consistently - consult a doctor');
-    if (deficiencyWarnings.length > 2) alerts.push('🩸 Possible iron deficiency symptoms - see a doctor');
-    
-    return alerts;
-  };
-
-  return (
-    <div className="insights">
-      <h2>🔍 Your Health Insights</h2>
-
-      {/* Health Alerts */}
-      {getHealthAlert().length > 0 && (
-        <div className="alert-box">
-          <h3>⚠️ Health Alerts</h3>
-          {getHealthAlert().map((alert, idx) => (
-            <p key={idx} className="alert-message">{alert}</p>
+        <div className="grid grid-cols-7 gap-2 mb-2">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div key={day} className="text-center font-semibold text-gray-600 text-sm py-2">
+              {day}
+            </div>
           ))}
         </div>
-      )}
 
-      {/* Stats Cards */}
-      <div className="insights-grid">
-        <div className="insight-card">
-          <h3>💧 Water Intake</h3>
-          <p className="insight-number">{avgWater}</p>
-          <p className="insight-label">cups/day (last 30 days)</p>
-          {avgWater >= 8 ? <p className="good">✅ Great hydration!</p> : <p className="warning">💡 Try for 8+ cups</p>}
+        <div className="grid grid-cols-7 gap-2">
+          {renderCalendar()}
         </div>
 
-        <div className="insight-card">
-          <h3>🏃 Exercise</h3>
-          <p className="insight-number">{exerciseDays}</p>
-          <p className="insight-label">days (last 30 days)</p>
-          {exerciseDays >= 3 ? <p className="good">✅ Good activity!</p> : <p className="warning">💡 Aim for 3-5 days/week</p>}
-        </div>
-
-        <div className="insight-card">
-          <h3>😊 Mood Tracking</h3>
-          <p className="insight-number">{lastThirtyDays.filter(e => e.mood).length}</p>
-          <p className="insight-label">moods tracked</p>
-          <p className="good">✅ Keep tracking daily</p>
-        </div>
-
-        <div className="insight-card">
-          <h3>🔴 Menstrual</h3>
-          <p className="insight-number">{lastThirtyDays.filter(e => e.menstrualFlow !== 'None').length}</p>
-          <p className="insight-label">days tracked</p>
-          <p className="good">✅ Stay aware of patterns</p>
-        </div>
-      </div>
-
-      {/* Recommendations */}
-      <div className="recommendations">
-        <h3>💡 Personalized Recommendations</h3>
-        <div className="recommendation-list">
-          <div className="recommendation-item">
-            <span>🥬</span>
-            <p><strong>Iron intake:</strong> Include leafy greens, red meat, or fortified cereals daily</p>
+        <div className="mt-6 flex gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
+            <span>Period days</span>
           </div>
-          <div className="recommendation-item">
-            <span>🥛</span>
-            <p><strong>Calcium & Vitamin D:</strong> Dairy, fortified plant milk, or supplements</p>
-          </div>
-          <div className="recommendation-item">
-            <span>💊</span>
-            <p><strong>Vitamins:</strong> Consider B-complex and magnesium during luteal phase</p>
-          </div>
-          <div className="recommendation-item">
-            <span>🧘</span>
-            <p><strong>Self-care:</strong> Adjust intensity of exercise based on cycle phase</p>
-          </div>
-          <div className="recommendation-item">
-            <span>🏥</span>
-            <p><strong>Doctor visit:</strong> Schedule annual check-up and discuss any concerns</p>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-purple-50 border-2 border-purple-200 rounded"></div>
+            <span>Logged days</span>
           </div>
         </div>
       </div>
+    );
+  };
 
-      <div className="data-summary">
-        <p>📊 Total entries: {entries.length} | Last 30 days: {lastThirtyDays.length}</p>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
+      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-6 shadow-lg">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Heart className="fill-current" size={32} />
+            <h1 className="text-3xl font-bold">Saheli</h1>
+          </div>
+          <p className="text-purple-100">Your personal health companion</p>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="flex gap-4 mb-6 border-b-2 border-gray-200">
+          <button 
+            onClick={() => setCurrentView('dashboard')}
+            className={`px-6 py-3 font-semibold transition-all ${
+              currentView === 'dashboard' 
+                ? 'text-purple-600 border-b-4 border-purple-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            📊 Dashboard
+          </button>
+          <button 
+            onClick={() => setCurrentView('calendar')}
+            className={`px-6 py-3 font-semibold transition-all ${
+              currentView === 'calendar' 
+                ? 'text-purple-600 border-b-4 border-purple-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            📅 Calendar
+          </button>
+          <button 
+            onClick={() => {
+              setSelectedDate(new Date());
+              setCurrentView('log');
+            }}
+            className={`px-6 py-3 font-semibold transition-all ${
+              currentView === 'log' 
+                ? 'text-purple-600 border-b-4 border-purple-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            📝 Log Entry
+          </button>
+        </div>
+
+        {currentView === 'dashboard' && renderDashboard()}
+        {currentView === 'calendar' && renderCalendarView()}
+        {currentView === 'log' && renderLogEntry()}
       </div>
     </div>
   );
