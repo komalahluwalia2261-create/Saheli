@@ -1,115 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Heart, Droplet, Activity, Utensils, Pill, Users, AlertCircle, TrendingUp, Moon } from 'lucide-react';
+import { Calendar, Heart, Droplet, Coffee, Dumbbell, Pill, TrendingUp, AlertCircle, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
 
-export default function SaheliApp() {
-  const [currentView, setCurrentView] = useState('dashboard');
+const SaheliApp = () => {
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [cycleData, setCycleData] = useState({
-    lastPeriodStart: null,
-    cycleLength: 28,
-    periodLength: 5
-  });
-  const [dailyLogs, setDailyLogs] = useState({});
-  const [healthInsights, setHealthInsights] = useState([]);
+  const [view, setView] = useState('calendar'); // calendar, daily-log, insights
+  const [userData, setUserData] = useState({});
+  const [showAIInsights, setShowAIInsights] = useState(false);
 
+  // Load data on mount
   useEffect(() => {
-    loadData();
+    loadUserData();
   }, []);
 
-  const loadData = () => {
+  const loadUserData = async () => {
     try {
-      const savedCycle = localStorage.getItem('saheli-cycle-data');
-      const savedLogs = localStorage.getItem('saheli-daily-logs');
-      const savedInsights = localStorage.getItem('saheli-health-insights');
-      
-      if (savedCycle) setCycleData(JSON.parse(savedCycle));
-      if (savedLogs) setDailyLogs(JSON.parse(savedLogs));
-      if (savedInsights) setHealthInsights(JSON.parse(savedInsights));
+      const result = await window.storage.get('saheli-user-data');
+      if (result) {
+        setUserData(JSON.parse(result.value));
+      }
     } catch (error) {
-      console.log('No existing data, starting fresh');
+      console.log('No existing data found, starting fresh');
+      setUserData({});
     }
   };
 
-  const saveData = (type, data) => {
+  const saveUserData = async (data) => {
     try {
-      localStorage.setItem(type, JSON.stringify(data));
+      await window.storage.set('saheli-user-data', JSON.stringify(data));
+      setUserData(data);
     } catch (error) {
       console.error('Error saving data:', error);
     }
   };
 
-  const getDayLog = (date) => {
-    const dateKey = date.toISOString().split('T')[0];
-    return dailyLogs[dateKey] || {};
-  };
-
-  const saveDayLog = (date, logData) => {
-    const dateKey = date.toISOString().split('T')[0];
-    const newLogs = { ...dailyLogs, [dateKey]: logData };
-    setDailyLogs(newLogs);
-    saveData('saheli-daily-logs', newLogs);
-    analyzeHealthPattern(newLogs);
-  };
-
-  const analyzeHealthPattern = (logs) => {
-    const recentLogs = Object.entries(logs).slice(-30);
-    const insights = [];
-
-    // Water intake analysis
-    const waterIntakes = recentLogs.map(([_, log]) => log.water || 0);
-    const avgWater = waterIntakes.reduce((a, b) => a + b, 0) / waterIntakes.length;
-    if (avgWater < 6) {
-      insights.push({
-        type: 'warning',
-        message: 'Your water intake is below recommended levels. Consider drinking more water.',
-        severity: 'medium'
-      });
-    }
-
-    // Mood pattern analysis
-    const lowMoodDays = recentLogs.filter(([_, log]) => 
-      ['sad', 'anxious', 'irritable'].includes(log.mood)
-    ).length;
-    if (lowMoodDays > 10) {
-      insights.push({
-        type: 'alert',
-        message: 'Persistent low mood detected. Consider consulting a healthcare provider.',
-        severity: 'high'
-      });
-    }
-
-    // Exercise tracking
-    const exerciseDays = recentLogs.filter(([_, log]) => log.exercise).length;
-    if (exerciseDays < 8) {
-      insights.push({
-        type: 'info',
-        message: 'Low physical activity. Regular exercise can help manage PMS symptoms.',
-        severity: 'low'
-      });
-    }
-
-    setHealthInsights(insights);
-    saveData('saheli-health-insights', insights);
-  };
-
-  const calculateCycleDay = () => {
-    if (!cycleData.lastPeriodStart) return null;
-    const lastPeriod = new Date(cycleData.lastPeriodStart);
-    const today = new Date();
-    const diff = Math.floor((today - lastPeriod) / (1000 * 60 * 60 * 24));
-    return (diff % cycleData.cycleLength) + 1;
-  };
-
-  const getCyclePhase = (day) => {
-    if (day <= cycleData.periodLength) return 'Menstruation';
-    if (day <= 14) return 'Follicular Phase';
-    if (day <= 16) return 'Ovulation';
-    return 'Luteal Phase';
-  };
-
-  const renderCalendar = () => {
-    const year = selectedDate.getFullYear();
-    const month = selectedDate.getMonth();
+  // Calendar generation
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
@@ -117,365 +45,477 @@ export default function SaheliApp() {
 
     const days = [];
     for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(<div key={`empty-${i}`} className="p-2"></div>);
+      days.push(null);
     }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      const dateKey = date.toISOString().split('T')[0];
-      const hasLog = dailyLogs[dateKey];
-      const isPeriod = hasLog?.isPeriod;
-      
-      days.push(
-        <button
-          key={day}
-          onClick={() => {
-            setSelectedDate(date);
-            setCurrentView('log');
-          }}
-          className={`p-2 rounded-lg border-2 hover:border-purple-400 transition-all ${
-            isPeriod ? 'bg-red-100 border-red-300' : hasLog ? 'bg-purple-50 border-purple-200' : 'border-gray-200'
-          }`}
-        >
-          <div className="text-sm font-medium">{day}</div>
-          {hasLog && (
-            <div className="flex gap-1 mt-1 justify-center">
-              {hasLog.mood && <div className="w-1.5 h-1.5 bg-purple-400 rounded-full"></div>}
-              {hasLog.water && <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>}
-              {hasLog.exercise && <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>}
-            </div>
-          )}
-        </button>
-      );
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(new Date(year, month, i));
     }
-
     return days;
   };
 
-  const renderDashboard = () => {
-    const cycleDay = calculateCycleDay();
-    const phase = cycleDay ? getCyclePhase(cycleDay) : 'Not tracked';
-
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-gradient-to-br from-pink-100 to-purple-100 p-6 rounded-xl shadow-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <Heart className="text-pink-500" size={24} />
-              <h3 className="font-semibold text-gray-800">Cycle Status</h3>
-            </div>
-            <div className="text-3xl font-bold text-purple-600 mb-1">
-              {cycleDay ? `Day ${cycleDay}` : 'Ready'}
-            </div>
-            <p className="text-sm text-gray-600">{phase}</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-blue-100 to-cyan-100 p-6 rounded-xl shadow-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <Activity className="text-blue-500" size={24} />
-              <h3 className="font-semibold text-gray-800">Today's Summary</h3>
-            </div>
-            <div className="text-sm text-gray-700">
-              {getDayLog(new Date()).mood ? (
-                <div>Logged for today ✓</div>
-              ) : (
-                <div>No entry today yet</div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-100 to-pink-100 p-6 rounded-xl shadow-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="text-purple-500" size={24} />
-              <h3 className="font-semibold text-gray-800">Stats</h3>
-            </div>
-            <div className="text-2xl font-bold text-purple-600">
-              {Object.keys(dailyLogs).length}
-            </div>
-            <p className="text-sm text-gray-600">Total entries</p>
-          </div>
-        </div>
-
-        {healthInsights.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <AlertCircle className="text-orange-500" size={24} />
-              <h3 className="font-semibold text-gray-800">Health Insights</h3>
-            </div>
-            <div className="space-y-3">
-              {healthInsights.map((insight, idx) => (
-                <div key={idx} className={`p-4 rounded-lg ${
-                  insight.severity === 'high' ? 'bg-red-50 border-l-4 border-red-400' :
-                  insight.severity === 'medium' ? 'bg-orange-50 border-l-4 border-orange-400' :
-                  'bg-blue-50 border-l-4 border-blue-400'
-                }`}>
-                  <p className="text-sm text-gray-700">{insight.message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
+  const formatDateKey = (date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   };
 
-  const renderLogEntry = () => {
-    const currentLog = getDayLog(selectedDate);
-    const [logData, setLogData] = useState(currentLog);
+  const getDayData = (date) => {
+    const key = formatDateKey(date);
+    return userData[key] || {};
+  };
 
-    const handleSave = () => {
-      saveDayLog(selectedDate, logData);
-      setCurrentView('calendar');
+  const updateDayData = (date, newData) => {
+    const key = formatDateKey(date);
+    const updatedData = {
+      ...userData,
+      [key]: { ...userData[key], ...newData }
+    };
+    saveUserData(updatedData);
+  };
+
+  const getPeriodStatus = (date) => {
+    const dayData = getDayData(date);
+    return dayData.periodFlow || null;
+  };
+
+  // AI Insights Generator
+  const generateAIInsights = () => {
+    const insights = [];
+    const dataPoints = Object.keys(userData).length;
+
+    if (dataPoints < 7) {
+      return [{
+        type: 'info',
+        message: 'Keep tracking for at least a week to get personalized health insights!'
+      }];
+    }
+
+    // Analyze patterns
+    const recentDays = Object.entries(userData)
+      .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+      .slice(0, 30);
+
+    // Water intake analysis
+    const waterDays = recentDays.filter(([_, data]) => data.waterIntake);
+    if (waterDays.length > 0) {
+      const avgWater = waterDays.reduce((sum, [_, data]) => sum + (data.waterIntake || 0), 0) / waterDays.length;
+      if (avgWater < 6) {
+        insights.push({
+          type: 'warning',
+          message: `Your average water intake is ${avgWater.toFixed(1)} glasses/day. Try to increase to 8 glasses for better health.`
+        });
+      }
+    }
+
+    // Mood pattern analysis
+    const moodDays = recentDays.filter(([_, data]) => data.mood);
+    const lowMoodDays = moodDays.filter(([_, data]) => ['sad', 'anxious', 'irritable'].includes(data.mood));
+    if (lowMoodDays.length > moodDays.length * 0.5) {
+      insights.push({
+        type: 'alert',
+        message: 'You\'ve been experiencing low moods frequently. Consider talking to a healthcare provider about your mental wellbeing.'
+      });
+    }
+
+    // Exercise tracking
+    const exerciseDays = recentDays.filter(([_, data]) => data.exercise).length;
+    if (exerciseDays < 3) {
+      insights.push({
+        type: 'info',
+        message: 'Regular exercise can help with period symptoms. Try to exercise at least 3 times a week.'
+      });
+    }
+
+    // Calorie analysis
+    const calorieDays = recentDays.filter(([_, data]) => data.totalCalories);
+    if (calorieDays.length > 7) {
+      const avgCalories = calorieDays.reduce((sum, [_, data]) => sum + (data.totalCalories || 0), 0) / calorieDays.length;
+      if (avgCalories < 1200) {
+        insights.push({
+          type: 'warning',
+          message: `Your average calorie intake (${avgCalories.toFixed(0)} cal/day) seems low. Ensure you're eating enough for your energy needs.`
+        });
+      }
+    }
+
+    // Period irregularity check
+    const periodDays = recentDays.filter(([_, data]) => data.periodFlow);
+    if (periodDays.length > 0) {
+      insights.push({
+        type: 'info',
+        message: `You've tracked ${periodDays.length} period days in the last month. A typical cycle is 28 days with 3-7 days of bleeding.`
+      });
+    }
+
+    return insights.length > 0 ? insights : [{
+      type: 'success',
+      message: 'Great job tracking! Your health patterns look good. Keep it up!'
+    }];
+  };
+
+  // Calendar View Component
+  const CalendarView = () => {
+    const days = getDaysInMonth(currentDate);
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"];
+
+    const changeMonth = (delta) => {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + delta, 1));
     };
 
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6 max-w-3xl mx-auto">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800">
-          Log Your Day - {selectedDate.toLocaleDateString()}
-        </h2>
-
-        <div className="space-y-6">
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-purple-600 mb-2">
-              <Heart size={18} />
-              Mood & Health
-            </label>
-            <select 
-              value={logData.mood || ''}
-              onChange={(e) => setLogData({...logData, mood: e.target.value})}
-              className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-purple-400 outline-none"
-            >
-              <option value="">Select mood...</option>
-              <option value="happy">😊 Happy</option>
-              <option value="calm">😌 Calm</option>
-              <option value="energetic">⚡ Energetic</option>
-              <option value="tired">😴 Tired</option>
-              <option value="sad">😢 Sad</option>
-              <option value="anxious">😰 Anxious</option>
-              <option value="irritable">😠 Irritable</option>
-              <option value="stressed">😫 Stressed</option>
-            </select>
+      <div className="max-w-4xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-gray-100 rounded">
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <h2 className="text-2xl font-bold text-pink-600">
+              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+            </h2>
+            <button onClick={() => changeMonth(1)} className="p-2 hover:bg-gray-100 rounded">
+              <ChevronRight className="w-6 h-6" />
+            </button>
           </div>
 
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-pink-600 mb-2">
-              <Moon size={18} />
-              Period Status
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2">
-                <input 
-                  type="checkbox"
-                  checked={logData.isPeriod || false}
-                  onChange={(e) => setLogData({...logData, isPeriod: e.target.checked})}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm">On period</span>
-              </label>
-              {logData.isPeriod && (
-                <select 
-                  value={logData.flow || ''}
-                  onChange={(e) => setLogData({...logData, flow: e.target.value})}
-                  className="p-2 border-2 border-gray-200 rounded-lg text-sm"
+          <div className="grid grid-cols-7 gap-2 mb-2">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              <div key={day} className="text-center font-semibold text-gray-600 py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-2">
+            {days.map((day, index) => {
+              if (!day) return <div key={`empty-${index}`} className="aspect-square" />;
+              
+              const periodStatus = getPeriodStatus(day);
+              const dayData = getDayData(day);
+              const isToday = formatDateKey(day) === formatDateKey(new Date());
+              const hasData = Object.keys(dayData).length > 0;
+
+              return (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setSelectedDate(day);
+                    setView('daily-log');
+                  }}
+                  className={`aspect-square p-2 rounded-lg border-2 transition-all hover:shadow-md relative
+                    ${isToday ? 'border-pink-500 bg-pink-50' : 'border-gray-200'}
+                    ${periodStatus ? 'bg-red-100' : hasData ? 'bg-blue-50' : 'bg-white'}
+                  `}
                 >
-                  <option value="">Flow...</option>
-                  <option value="light">Light</option>
-                  <option value="medium">Medium</option>
-                  <option value="heavy">Heavy</option>
-                </select>
-              )}
-            </div>
-            {logData.isPeriod && (
-              <select 
-                value={logData.product || ''}
-                onChange={(e) => setLogData({...logData, product: e.target.value})}
-                className="w-full p-3 border-2 border-gray-200 rounded-lg mt-2"
-              >
-                <option value="">Product used...</option>
-                <option value="pad">Pad</option>
-                <option value="tampon">Tampon</option>
-                <option value="cup">Menstrual Cup</option>
-                <option value="disc">Menstrual Disc</option>
-                <option value="period-underwear">Period Underwear</option>
-              </select>
-            )}
+                  <div className="text-sm font-semibold">{day.getDate()}</div>
+                  {periodStatus && (
+                    <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2">
+                      <Droplet className="w-4 h-4 text-red-500 fill-current" />
+                    </div>
+                  )}
+                  {hasData && !periodStatus && (
+                    <div className="absolute bottom-1 right-1">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-blue-600 mb-2">
-              <Droplet size={18} />
-              Water Intake (cups)
-            </label>
-            <input 
-              type="number"
-              value={logData.water || ''}
-              onChange={(e) => setLogData({...logData, water: parseInt(e.target.value)})}
-              className="w-full p-3 border-2 border-gray-200 rounded-lg"
-              placeholder="8"
-              min="0"
-            />
+          <div className="mt-6 flex gap-4 justify-center">
+            <button
+              onClick={() => setShowAIInsights(!showAIInsights)}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:shadow-lg transition-all"
+            >
+              <TrendingUp className="w-5 h-5" />
+              AI Health Insights
+            </button>
           </div>
 
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-green-600 mb-2">
-              <Activity size={18} />
-              Exercise
-            </label>
-            <input 
-              type="text"
-              value={logData.exercise || ''}
-              onChange={(e) => setLogData({...logData, exercise: e.target.value})}
-              className="w-full p-3 border-2 border-gray-200 rounded-lg"
-              placeholder="e.g., 30 min walk, yoga"
-            />
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-orange-600 mb-2">
-              <Utensils size={18} />
-              Meals & Calories
-            </label>
-            <textarea 
-              value={logData.meals || ''}
-              onChange={(e) => setLogData({...logData, meals: e.target.value})}
-              className="w-full p-3 border-2 border-gray-200 rounded-lg"
-              placeholder="Describe your meals (AI will estimate calories)"
-              rows="3"
-            />
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-purple-600 mb-2">
-              <Pill size={18} />
-              Supplements & Medications
-            </label>
-            <input 
-              type="text"
-              value={logData.supplements || ''}
-              onChange={(e) => setLogData({...logData, supplements: e.target.value})}
-              className="w-full p-3 border-2 border-gray-200 rounded-lg"
-              placeholder="e.g., Vitamin D, Iron"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-600 mb-2 block">
-              Symptoms (select all that apply)
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {['cramps', 'headache', 'bloating', 'acne', 'fatigue', 'backache', 'breast-tenderness', 'nausea'].map(symptom => (
-                <label key={symptom} className="flex items-center gap-2 text-sm">
-                  <input 
-                    type="checkbox"
-                    checked={logData.symptoms?.includes(symptom) || false}
-                    onChange={(e) => {
-                      const symptoms = logData.symptoms || [];
-                      setLogData({
-                        ...logData,
-                        symptoms: e.target.checked 
-                          ? [...symptoms, symptom]
-                          : symptoms.filter(s => s !== symptom)
-                      });
-                    }}
-                    className="w-4 h-4"
-                  />
-                  <span className="capitalize">{symptom.replace('-', ' ')}</span>
-                </label>
+          {showAIInsights && (
+            <div className="mt-6 space-y-3">
+              {generateAIInsights().map((insight, idx) => (
+                <div
+                  key={idx}
+                  className={`p-4 rounded-lg border-l-4 ${
+                    insight.type === 'alert' ? 'bg-red-50 border-red-500' :
+                    insight.type === 'warning' ? 'bg-yellow-50 border-yellow-500' :
+                    insight.type === 'success' ? 'bg-green-50 border-green-500' :
+                    'bg-blue-50 border-blue-500'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className={`w-5 h-5 mt-0.5 ${
+                      insight.type === 'alert' ? 'text-red-500' :
+                      insight.type === 'warning' ? 'text-yellow-500' :
+                      insight.type === 'success' ? 'text-green-500' :
+                      'text-blue-500'
+                    }`} />
+                    <p className="text-sm">{insight.message}</p>
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-600 mb-2 block">
-              Notes
-            </label>
-            <textarea 
-              value={logData.notes || ''}
-              onChange={(e) => setLogData({...logData, notes: e.target.value})}
-              className="w-full p-3 border-2 border-gray-200 rounded-lg"
-              placeholder="Any additional notes..."
-              rows="2"
-            />
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input 
-              type="checkbox"
-              checked={logData.absent || false}
-              onChange={(e) => setLogData({...logData, absent: e.target.checked})}
-              className="w-4 h-4"
-            />
-            <span>Absent from work/school today</span>
-          </label>
-
-          <div className="flex gap-3 pt-4">
-            <button 
-              onClick={handleSave}
-              className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all"
-            >
-              Save Entry
-            </button>
-            <button 
-              onClick={() => setCurrentView('calendar')}
-              className="px-6 py-3 border-2 border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </div>
+          )}
         </div>
       </div>
     );
   };
 
-  const renderCalendarView = () => {
+  // Daily Log Component
+  const DailyLogView = () => {
+    const dayData = getDayData(selectedDate);
+    const [meals, setMeals] = useState(dayData.meals || []);
+    const [currentMeal, setCurrentMeal] = useState('');
+
+    const estimateCalories = (mealDescription) => {
+      const lowCalWords = ['salad', 'fruit', 'vegetables', 'soup'];
+      const medCalWords = ['rice', 'bread', 'pasta', 'chicken', 'fish'];
+      const highCalWords = ['pizza', 'burger', 'fries', 'cake', 'ice cream', 'fried'];
+
+      const lower = mealDescription.toLowerCase();
+      if (highCalWords.some(word => lower.includes(word))) return 600;
+      if (medCalWords.some(word => lower.includes(word))) return 400;
+      if (lowCalWords.some(word => lower.includes(word))) return 200;
+      return 350;
+    };
+
+    const addMeal = () => {
+      if (!currentMeal.trim()) return;
+      const calories = estimateCalories(currentMeal);
+      const newMeals = [...meals, { description: currentMeal, calories }];
+      setMeals(newMeals);
+      const totalCalories = newMeals.reduce((sum, m) => sum + m.calories, 0);
+      updateDayData(selectedDate, { meals: newMeals, totalCalories });
+      setCurrentMeal('');
+    };
+
+    const updateField = (field, value) => {
+      updateDayData(selectedDate, { [field]: value });
+    };
+
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </h2>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1))}
-              className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+      <div className="max-w-4xl mx-auto p-4">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={() => setView('calendar')}
+              className="flex items-center gap-2 text-pink-600 hover:text-pink-700"
             >
-              ←
+              <ChevronLeft className="w-5 h-5" />
+              Back to Calendar
             </button>
-            <button 
-              onClick={() => setSelectedDate(new Date())}
-              className="px-4 py-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
-            >
-              Today
-            </button>
-            <button 
-              onClick={() => setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1))}
-              className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
-            >
-              →
-            </button>
+            <h2 className="text-xl font-bold text-pink-600">
+              {selectedDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </h2>
           </div>
-        </div>
 
-        <div className="grid grid-cols-7 gap-2 mb-2">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="text-center font-semibold text-gray-600 text-sm py-2">
-              {day}
+          <div className="space-y-6">
+            {/* Period Tracking */}
+            <div className="border-b pb-4">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Droplet className="w-5 h-5 text-red-500" />
+                Period Flow
+              </h3>
+              <div className="flex gap-2">
+                {['none', 'spotting', 'light', 'medium', 'heavy'].map(flow => (
+                  <button
+                    key={flow}
+                    onClick={() => updateField('periodFlow', flow)}
+                    className={`px-4 py-2 rounded-lg capitalize ${
+                      dayData.periodFlow === flow
+                        ? 'bg-red-500 text-white'
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    {flow}
+                  </button>
+                ))}
+              </div>
+              
+              {dayData.periodFlow && dayData.periodFlow !== 'none' && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium mb-2">Product Used</label>
+                  <select
+                    value={dayData.periodProduct || ''}
+                    onChange={(e) => updateField('periodProduct', e.target.value)}
+                    className="w-full p-2 border rounded-lg"
+                  >
+                    <option value="">Select...</option>
+                    <option value="pad">Pad</option>
+                    <option value="tampon">Tampon</option>
+                    <option value="cup">Menstrual Cup</option>
+                    <option value="disc">Menstrual Disc</option>
+                    <option value="period-underwear">Period Underwear</option>
+                  </select>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
 
-        <div className="grid grid-cols-7 gap-2">
-          {renderCalendar()}
-        </div>
+            {/* Mood Tracking */}
+            <div className="border-b pb-4">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Heart className="w-5 h-5 text-pink-500" />
+                Mood
+              </h3>
+              <div className="grid grid-cols-4 gap-2">
+                {['happy', 'sad', 'anxious', 'irritable', 'energetic', 'tired', 'calm', 'stressed'].map(mood => (
+                  <button
+                    key={mood}
+                    onClick={() => updateField('mood', mood)}
+                    className={`px-3 py-2 rounded-lg capitalize text-sm ${
+                      dayData.mood === mood
+                        ? 'bg-pink-500 text-white'
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    {mood}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <div className="mt-6 flex gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
-            <span>Period days</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-purple-50 border-2 border-purple-200 rounded"></div>
-            <span>Logged days</span>
+            {/* Meals & Calories */}
+            <div className="border-b pb-4">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Coffee className="w-5 h-5 text-orange-500" />
+                Meals & Nutrition
+              </h3>
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={currentMeal}
+                  onChange={(e) => setCurrentMeal(e.target.value)}
+                  placeholder="Describe your meal..."
+                  className="flex-1 p-2 border rounded-lg"
+                  onKeyPress={(e) => e.key === 'Enter' && addMeal()}
+                />
+                <button
+                  onClick={addMeal}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+              {meals.length > 0 && (
+                <div className="space-y-2">
+                  {meals.map((meal, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <span className="text-sm">{meal.description}</span>
+                      <span className="text-sm font-semibold text-orange-600">~{meal.calories} cal</span>
+                    </div>
+                  ))}
+                  <div className="text-right font-bold text-lg text-orange-600 mt-2">
+                    Total: {dayData.totalCalories || 0} calories
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Exercise */}
+            <div className="border-b pb-4">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Dumbbell className="w-5 h-5 text-green-500" />
+                Exercise
+              </h3>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={dayData.exercise || false}
+                    onChange={(e) => updateField('exercise', e.target.checked)}
+                    className="w-5 h-5"
+                  />
+                  <span>Exercised today</span>
+                </label>
+                {dayData.exercise && (
+                  <input
+                    type="text"
+                    value={dayData.exerciseType || ''}
+                    onChange={(e) => updateField('exerciseType', e.target.value)}
+                    placeholder="What type?"
+                    className="flex-1 p-2 border rounded-lg"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Water & Supplements */}
+            <div className="border-b pb-4">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Droplet className="w-5 h-5 text-blue-500" />
+                Water Intake
+              </h3>
+              <div className="flex items-center gap-4">
+                <input
+                  type="number"
+                  value={dayData.waterIntake || 0}
+                  onChange={(e) => updateField('waterIntake', parseInt(e.target.value) || 0)}
+                  className="w-24 p-2 border rounded-lg"
+                  min="0"
+                  max="20"
+                />
+                <span>glasses</span>
+              </div>
+            </div>
+
+            <div className="border-b pb-4">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                <Pill className="w-5 h-5 text-purple-500" />
+                Supplements
+              </h3>
+              <input
+                type="text"
+                value={dayData.supplements || ''}
+                onChange={(e) => updateField('supplements', e.target.value)}
+                placeholder="List supplements taken..."
+                className="w-full p-2 border rounded-lg"
+              />
+            </div>
+
+            {/* Symptoms & Notes */}
+            <div>
+              <h3 className="font-semibold text-lg mb-3">Symptoms & Notes</h3>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {['cramps', 'headache', 'bloating', 'acne', 'fatigue', 'nausea'].map(symptom => (
+                  <button
+                    key={symptom}
+                    onClick={() => {
+                      const symptoms = dayData.symptoms || [];
+                      const newSymptoms = symptoms.includes(symptom)
+                        ? symptoms.filter(s => s !== symptom)
+                        : [...symptoms, symptom];
+                      updateField('symptoms', newSymptoms);
+                    }}
+                    className={`px-3 py-2 rounded-lg capitalize text-sm ${
+                      (dayData.symptoms || []).includes(symptom)
+                        ? 'bg-red-500 text-white'
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                  >
+                    {symptom}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={dayData.notes || ''}
+                onChange={(e) => updateField('notes', e.target.value)}
+                placeholder="Additional notes about your day..."
+                className="w-full p-3 border rounded-lg h-24"
+              />
+            </div>
+
+            {/* Absent from work/school */}
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={dayData.absent || false}
+                  onChange={(e) => updateField('absent', e.target.checked)}
+                  className="w-5 h-5"
+                />
+                <span className="font-medium">Absent from work/school due to period symptoms</span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -483,58 +523,23 @@ export default function SaheliApp() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
-      <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-6 shadow-lg">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      <header className="bg-white shadow-md">
+        <div className="max-w-4xl mx-auto p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Heart className="fill-current" size={32} />
-            <h1 className="text-3xl font-bold">Saheli</h1>
+            <Heart className="w-8 h-8 text-pink-500 fill-current" />
+            <h1 className="text-2xl font-bold text-pink-600">Saheli</h1>
           </div>
-          <p className="text-purple-100">Your personal health companion</p>
+          <p className="text-sm text-gray-600">Your personal health companion</p>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="flex gap-4 mb-6 border-b-2 border-gray-200">
-          <button 
-            onClick={() => setCurrentView('dashboard')}
-            className={`px-6 py-3 font-semibold transition-all ${
-              currentView === 'dashboard' 
-                ? 'text-purple-600 border-b-4 border-purple-600' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            📊 Dashboard
-          </button>
-          <button 
-            onClick={() => setCurrentView('calendar')}
-            className={`px-6 py-3 font-semibold transition-all ${
-              currentView === 'calendar' 
-                ? 'text-purple-600 border-b-4 border-purple-600' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            📅 Calendar
-          </button>
-          <button 
-            onClick={() => {
-              setSelectedDate(new Date());
-              setCurrentView('log');
-            }}
-            className={`px-6 py-3 font-semibold transition-all ${
-              currentView === 'log' 
-                ? 'text-purple-600 border-b-4 border-purple-600' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            📝 Log Entry
-          </button>
-        </div>
-
-        {currentView === 'dashboard' && renderDashboard()}
-        {currentView === 'calendar' && renderCalendarView()}
-        {currentView === 'log' && renderLogEntry()}
-      </div>
+      <main className="py-6">
+        {view === 'calendar' && <CalendarView />}
+        {view === 'daily-log' && <DailyLogView />}
+      </main>
     </div>
   );
-}
+};
+
+export default SaheliApp;
